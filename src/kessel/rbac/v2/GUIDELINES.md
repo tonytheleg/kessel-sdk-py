@@ -15,7 +15,7 @@ This module is the SDK's primary example of dual-protocol coordination:
 
 ### Endpoint Pattern
 
-```
+```text
 GET {rbac_base_endpoint}/api/rbac/v2/workspaces/?type={root|default}
 ```
 

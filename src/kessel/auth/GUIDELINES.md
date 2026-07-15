@@ -31,7 +31,7 @@ Only two files in this directory are hand-written:
 
 - `get_token()` caches tokens and auto-refreshes 300 seconds before expiry. Do not reduce this buffer below 60 seconds.
 - Missing `expires_in` in the token response defaults to 0, causing immediate re-fetch on next call.
-- `force_refresh=True` bypasses the cache and forces a new SSO call.
+- `force_refresh=True` requests a token refresh, but under concurrent contention a waiting caller may reuse the token fetched by another thread (via the generation counter) instead of making its own SSO call.
 
 ### Thread Safety -- Double-Checked Locking
 

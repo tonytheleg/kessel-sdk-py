@@ -149,7 +149,7 @@ A fourth workflow (`buf-generate.yml`) runs on a schedule (every 6 hours) and on
 
 7. **Hardcoding credentials or token endpoints.** Use environment variables for secrets. Use `fetch_oidc_discovery()` for token endpoints.
 
-8. **Catching bare `Exception` for gRPC calls.** Always catch `grpc.RpcError` specifically. Branch on `e.code()` for actionable statuses: `PERMISSION_DENIED`, `UNAUTHENTICATED` (token expired -- refresh and retry), `UNAVAILABLE` (connectivity), `INVALID_ARGUMENT`, `NOT_FOUND`.
+8. **Catching bare `Exception` for gRPC calls.** Always catch `grpc.RpcError` specifically. Branch on `e.code()` for actionable statuses: `UNAUTHENTICATED` (credential issue -- refresh once and retry only if the refresh itself succeeds; do not loop), `PERMISSION_DENIED`, `UNAVAILABLE` (connectivity), `INVALID_ARGUMENT`, `NOT_FOUND`. If the credential refresh fails or the retry still returns `UNAUTHENTICATED`, surface the error rather than retrying further.
 
 9. **Ignoring per-item errors in bulk responses.** `CheckBulk` can succeed at the RPC level while individual items have errors. Check `pair.HasField("error")` for each pair.
 
