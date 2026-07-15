@@ -291,8 +291,12 @@ See [`examples/rbac_list_workspaces.py`](./examples/rbac_list_workspaces.py) for
 
 ## Documentation
 
-- **[AGENTS.md](AGENTS.md)** -- Onboarding guide for AI agents working in this repository, including cross-cutting conventions, project structure, and a docs index
-- **[docs/](docs/)** -- Domain-specific guideline files covering security, performance, error handling, API contracts, testing, and integration
+For AI-assisted development context, see [AGENTS.md](AGENTS.md). Directory-local `GUIDELINES.md` files provide detailed conventions for specific areas of the codebase:
+
+- **[src/kessel/auth/GUIDELINES.md](src/kessel/auth/GUIDELINES.md)** -- OAuth2 token lifecycle and security rules
+- **[src/kessel/inventory/GUIDELINES.md](src/kessel/inventory/GUIDELINES.md)** -- ClientBuilder, channel construction, version directories
+- **[src/kessel/rbac/v2/GUIDELINES.md](src/kessel/rbac/v2/GUIDELINES.md)** -- RBAC helpers, REST workspace queries, streaming pagination
+- **[src/kessel/console/GUIDELINES.md](src/kessel/console/GUIDELINES.md)** -- x-rh-identity parsing, principal extraction
 
 ## Contributing
 

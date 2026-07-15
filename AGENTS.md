@@ -2,16 +2,16 @@
 
 This file provides orientation for AI agents (Claude, Cursor, CodeRabbit, etc.) working in the `kessel-sdk-py` repository -- a Python gRPC/REST SDK for [Project Kessel](https://github.com/project-kessel) services.
 
-## Detailed Guidelines
+## Guidelines Index
 
-The following guideline files contain in-depth, domain-specific rules. Read the relevant file before working in that area.
+Each SDK module has a local GUIDELINES.md with module-specific patterns, conventions, and testing guidance. Read the relevant file before working in that area.
 
-- `docs/security-guidelines.md` -- gRPC channel security, OIDC constraints, token lifecycle, RBAC org_id validation
-- `docs/performance-guidelines.md` -- Async/sync selection, streaming pagination, bulk APIs, consistency modes
-- `docs/error-handling-guidelines.md` -- gRPC status codes, streaming errors, CheckBulk per-item errors, HTTP/auth errors
-- `docs/api-contracts-guidelines.md` -- v1beta2 type conventions, shared reference types, backward compatibility, protobuf runtime
-- `docs/testing-guidelines.md` -- Mocking patterns, async test patterns, assertions, test boundaries
-- `docs/integration-guidelines.md` -- New service setup, RBAC REST API, multi-protocol coordination, env vars
+| Module | File | Covers |
+|---|---|---|
+| Auth | `src/kessel/auth/GUIDELINES.md` | OAuth2 token lifecycle, OIDC discovery, thread-safe refresh, import guards, security rules |
+| Inventory | `src/kessel/inventory/GUIDELINES.md` | ClientBuilder fluent API, channel construction, credential defaults, version directories, adding new services |
+| RBAC v2 | `src/kessel/rbac/v2/GUIDELINES.md` | Dual-protocol design, REST workspace queries, factory functions, streaming pagination |
+| Console | `src/kessel/console/GUIDELINES.md` | x-rh-identity parsing, identity type dispatch, SubjectReference construction |
 
 ## Repository Structure
 
@@ -89,6 +89,7 @@ This distinction is critical. Agents must never edit generated files.
   - flake8: `flake8 --exclude '*_pb2.py,*_pb2_grpc.py' src/ examples/`
 - The `tests/` directory is not currently included in the black/flake8 CI commands, but tests should still follow the same style conventions.
 - Configuration lives in `pyproject.toml` (`[tool.black]`) and `.flake8`.
+- **No print/logging in library code**: The `src/kessel/` directory contains zero `print`, `logging`, or `debug` statements. Maintain this. If adding logging, never log access tokens, client secrets, or authorization headers.
 
 ## Naming Conventions
 
@@ -148,9 +149,15 @@ A fourth workflow (`buf-generate.yml`) runs on a schedule (every 6 hours) and on
 
 7. **Hardcoding credentials or token endpoints.** Use environment variables for secrets. Use `fetch_oidc_discovery()` for token endpoints.
 
-8. **Catching bare `Exception` for gRPC calls.** Always catch `grpc.RpcError` specifically.
+8. **Catching bare `Exception` for gRPC calls.** Always catch `grpc.RpcError` specifically. Branch on `e.code()` for actionable statuses: `PERMISSION_DENIED`, `UNAUTHENTICATED` (token expired -- refresh and retry), `UNAVAILABLE` (connectivity), `INVALID_ARGUMENT`, `NOT_FOUND`.
 
 9. **Ignoring per-item errors in bulk responses.** `CheckBulk` can succeed at the RPC level while individual items have errors. Check `pair.HasField("error")` for each pair.
+
+10. **Not wrapping streaming iteration in error handling.** Errors from server-streaming RPCs (`StreamedListObjects`, `StreamedListSubjects`) can surface during iteration, not just at call time. Wrap the entire `for`/`async for` loop in `try/except grpc.RpcError`.
+
+11. **Using `insecure()` outside local development.** `ClientBuilder.insecure()` and `grpc.local_channel_credentials()` must only target `localhost` or same-machine communication. Never use in deployed or staging environments.
+
+12. **Accepting `org_id` from untrusted input without validation.** The `org_id` is sent as the `x-rh-rbac-org-id` header. An attacker-controlled org ID could authorize cross-tenant access.
 
 ## Key Architectural Patterns
 
@@ -158,6 +165,39 @@ A fourth workflow (`buf-generate.yml`) runs on a schedule (every 6 hours) and on
 - **Fluent builder**: `ClientBuilder` uses method chaining (`ClientBuilder(target).insecure().build()`).
 - **Dual-protocol SDK**: gRPC for inventory operations, REST (`requests`) for RBAC workspace queries. Both share a single `OAuth2ClientCredentials` instance.
 - **`google-auth` adapter**: `GoogleOAuth2ClientCredentials` adapts the SDK's `OAuth2ClientCredentials` to the `google.auth.credentials.Credentials` interface for gRPC auth metadata injection.
+- **gRPC target format**: Targets use `host:port` with no scheme prefix (e.g., `localhost:9000`, `inventory.kessel.example.com:443`). Read from `os.environ.get("KESSEL_ENDPOINT", "localhost:9000")`.
+
+## Versioning and Compatibility
+
+- Never remove an API version directory. Old versions must remain importable.
+- Removing an API version requires a major SDK version bump (SemVer).
+- SDK versions across languages (Python, Ruby, Go) are independent.
+- Each generated `_pb2.py` file validates the protobuf runtime version at import time. The `protobuf` dependency range in `pyproject.toml` must match the version used by the buf plugins in `buf.gen.yaml`. Update both together when upgrading protobuf.
+
+## Environment Variables
+
+| Variable | Purpose |
+|---|---|
+| `KESSEL_ENDPOINT` | gRPC target (`host:port`) |
+| `AUTH_DISCOVERY_ISSUER_URL` | OIDC issuer base URL |
+| `AUTH_CLIENT_ID` | OAuth 2.0 client ID |
+| `AUTH_CLIENT_SECRET` | OAuth 2.0 client secret |
+| `RBAC_BASE_ENDPOINT` | RBAC v2 REST base URL |
+| `RBAC_RELATION` | Relation to check (e.g., `view_document`, `member`) |
+| `RBAC_SUBJECT_ID` | Subject principal user ID |
+| `RBAC_SUBJECT_DOMAIN` | Subject principal domain (e.g., `redhat`) |
+
+## Testing Conventions
+
+Project-wide testing rules. Each module's GUIDELINES.md has module-specific mocking and assertion patterns.
+
+- **Mocking**: Patch at the location where the name is looked up, not where it is defined. Use only `Mock` and `patch` from `unittest.mock` -- not `MagicMock`, `AsyncMock`, `PropertyMock`, or `create_autospec`.
+- **Assertions**: Use plain `assert` (not `self.assertEqual`). Use `pytest.raises(ExceptionType, match="...")` for exception verification.
+- **Async tests**: Mark every async test with `@pytest.mark.asyncio`. Async tests live alongside sync tests.
+- **No network calls**: Mock all external dependencies. Tests must run without a network.
+- **Test both paths**: Every new feature needs success and error path tests.
+- **Parameterized tests**: Use `@pytest.mark.parametrize` when the same assertion logic applies to multiple inputs.
+- **What is NOT tested** (by design): generated protobuf files, `build()`/`build_async()` methods (real gRPC channels), `oauth2_call_credentials` (google-auth transport), integration/e2e tests against live services.
 
 ## Maintaining Examples
 
@@ -173,14 +213,14 @@ When adding or changing public API surface, agents must create or update corresp
 ### Conventions
 
 - **Directory**: All examples live in `examples/` at the repository root.
-- **Naming**: `snake_case.py` — name the file after the feature or operation it demonstrates (e.g., `check.py`, `report_resource.py`, `rbac_list_workspaces.py`).
+- **Naming**: `snake_case.py` -- name the file after the feature or operation it demonstrates (e.g., `check.py`, `report_resource.py`, `rbac_list_workspaces.py`).
 - **Runnable scripts**: Each example must be a standalone script that can be executed directly (`python examples/<name>.py`). Use `if __name__ == "__main__": run()` (sync) or `if __name__ == "__main__": asyncio.run(run())` (async).
-- **Environment variables for configuration**: Use `os.environ.get()` for endpoints, credentials, and other runtime config (e.g., `KESSEL_ENDPOINT`, `AUTH_CLIENT_ID`). Never hardcode secrets.
-- **ClientBuilder pattern**: Demonstrate the fluent builder (`ClientBuilder(target).insecure().build()` or `.oauth2_client_authenticated(creds).build()`).
-- **Error handling**: Catch `grpc.RpcError` specifically — never bare `except Exception`.
-- **Channel lifecycle**: Always close channels via context manager — `with channel:` for sync (`.build()`) or `async with channel:` for async (`.build_async()`). Unclosed channels leak connections and file descriptors.
+- **Environment variables for configuration**: Use `os.environ.get()` for endpoints, credentials, and other runtime config. Never hardcode secrets.
 - **Print output**: Print results to stdout so users can see what the API returns.
 - **Not automated tests**: Examples require a live Kessel server and are not run in CI. Unit tests belong in `tests/`.
+- **Insecure channels in examples**: Examples may use `insecure()` for simplicity when targeting local dev servers. Production consumers must use `oauth2_client_authenticated()` with TLS.
+
+Follow the relevant module's GUIDELINES.md for ClientBuilder usage, error handling, and channel lifecycle patterns.
 
 ### Linting
 
