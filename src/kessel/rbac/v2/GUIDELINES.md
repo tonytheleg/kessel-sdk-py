@@ -27,22 +27,6 @@ GET {rbac_base_endpoint}/api/rbac/v2/workspaces/?type={root|default}
 
 The REST API returns `{"data": [{...}]}`. The helper takes the first item from `data`. If `data` is empty, raise `ValueError` with a message identifying the workspace type.
 
-### Function Signatures
-
-All REST functions follow this parameter pattern:
-
-```python
-def fetch_*(
-    rbac_base_endpoint: str,
-    org_id: str,
-    auth: Optional[AuthBase] = None,
-    http_client: Optional[requests] = None,
-) -> Workspace:
-```
-
-- `auth` -- a `requests.auth.AuthBase` (from `oauth2_auth_request()`). Always pass for non-local endpoints.
-- `http_client` -- injectable HTTP client (defaults to the `requests` module). Use for testing or `requests.Session` connection pooling.
-
 ### Workspace Class
 
 `Workspace` is a plain class with four public attributes: `id`, `name`, `type`, `description`. It is not a dataclass or namedtuple. Construct from REST response dict fields.
