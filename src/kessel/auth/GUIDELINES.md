@@ -20,11 +20,6 @@ Only two files in this directory are hand-written:
 - `RefreshTokenResponse` -- return type from `get_token()` (access_token + expires_at)
 - `OIDCDiscoveryMetadata` -- thin wrapper around the OIDC discovery JSON document
 
-### Factory Functions
-
-- `fetch_oidc_discovery(issuer_url)` -- fetches `/.well-known/openid-configuration`, returns `OIDCDiscoveryMetadata`
-- `oauth2_auth_request(credentials)` -- creates `AuthRequest` for use with `requests` library
-
 ## Conventions
 
 ### Token Lifecycle
@@ -71,14 +66,6 @@ if TYPE_CHECKING:
 Runtime imports of auth modules belong inside function bodies (see `kessel/grpc/__init__.py`).
 
 ## Public API
-
-`__init__.py` re-exports exactly these names via `__all__`:
-
-- `OAuth2ClientCredentials`
-- `GoogleOAuth2ClientCredentials`
-- `OIDCDiscoveryMetadata`
-- `fetch_oidc_discovery`
-- `oauth2_auth_request`
 
 When adding a new public symbol, add it to both `auth.py` and `__init__.py`'s `__all__`.
 
